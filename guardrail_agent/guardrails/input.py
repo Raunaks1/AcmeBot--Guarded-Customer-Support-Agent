@@ -1,6 +1,7 @@
 """Input-side guardrails: prompt-injection detection for user text AND retrieved documents."""
 from __future__ import annotations
 
+import base64
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -8,6 +9,8 @@ from dataclasses import dataclass, field
 from ..types import Doc, GuardrailEvent
 
 _ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\u00ad"), None)
+
+_B64 = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
 
 
 def normalize(text: str) -> str:
@@ -28,6 +31,10 @@ INJECTION_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("fake_system_tag", re.compile(r"</?\s*(system|instructions?)\s*>", _F)),
     ("new_instructions", re.compile(r"\bnew\s+(system\s+)?(instructions?|rules?)\s*:", _F)),
     ("pretend_no_rules", re.compile(r"\bpretend\s+(that\s+)?(you|the\s+rules|there\s+are\s+no)", _F)),
+    # Broad directive-override phrasing: any imperative verb + instruction/rules keyword within a sentence.
+    ("override_directives", re.compile(r"\b(ignore|disregard|forget|override|abandon|drop|cancel|replace|repeat|recite|echo|copy|parrot)\b[^.\n]{0,60}\b(instructions?|prompts?|rules?|guidelines?|messages?|directives?)\b", _F)),
+    # Instruction-extraction questions: asking about / requesting the system's instructions.
+    ("ask_instructions", re.compile(r"\b(what|which|who|when|where|why|how)\b[^.\n]{0,60}\b(instructions?|prompts?|rules?|guidelines?|messages?|directives?)\b", _F)),
 ]
 
 # Extra patterns that only make sense for retrieved *documents*: documents should never give orders.
@@ -37,9 +44,35 @@ CONTEXT_DIRECTIVE_PATTERNS: list[tuple[str, re.Pattern]] = [
 ]
 
 
+def _decoded_candidates(text: str) -> list[str]:
+    """Pull base64-like tokens out of the text and decode them; injection may hide inside encoded payloads."""
+    found: list[str] = []
+    for m in _B64.finditer(text):
+        token = m.group(0)
+        if len(token) < 16:
+            continue
+        padded = token + "=" * (-len(token) % 4)
+        try:
+            dec = base64.b64decode(padded, validate=False).decode("utf-8", errors="ignore").strip()
+        except Exception:
+            continue
+        if len(dec) > 4 and dec.strip():
+            found.append(dec)
+    return found
+
+
 def detect_injection(text: str, extra: list[tuple[str, re.Pattern]] | None = None) -> list[str]:
     t = normalize(text)
-    return [name for name, pat in INJECTION_PATTERNS + (extra or []) if pat.search(t)]
+    pats = INJECTION_PATTERNS + (extra or [])
+    hits = [name for name, pat in pats if pat.search(t)]
+    for dec in _decoded_candidates(text):
+        dt = normalize(dec)
+        hits += [name for name, pat in pats if pat.search(dt)]
+    out: list[str] = []
+    for h in hits:
+        if h not in out:
+            out.append(h)
+    return out
 
 
 @dataclass
