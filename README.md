@@ -1,9 +1,9 @@
 # guardrail-agent
 
-![CI](https://github.com/<your-username>/guardrail-agent/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/<your-username>/guardrail-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/guardrail-agent/actions/workflows/ci.yml)
 
-A customer-support agent that is **guarded, evaluated, and continuously tested**: every push runs 28 unit tests plus a
-60-case eval suite and fails the build if a safety regression slips in.
+A customer-support agent that is **guarded, evaluated, and continuously tested**: every push runs 57 unit tests plus a
+63-case eval suite and fails the build if a safety regression slips in.
 
 ## Architecture
 
@@ -35,22 +35,22 @@ python -m guardrail_agent                   # interactive demo
 python -m evals.run_evals --llm anthropic   # live model (pip install anthropic; set ANTHROPIC_API_KEY)
 ```
 
-## Results (deterministic mock model, 60 cases)
+## Results (deterministic mock model, 63 cases)
 
 | Category | Guardrails ON | Guardrails OFF |
 |---|---|---|
-| normal | 12/12 | 11/12 |
-| edge | 10/10 | 6/10 |
+| normal | 13/13 | 12/13 |
+| edge | 11/11 | 7/11 |
 | adversarial (direct injection) | 10/10 | 0/10 |
 | indirect injection | 5/5 | 0/5 |
 | risky actions | 8/8 | 2/8 |
-| PII | 3/3 | 0/3 |
+| PII | 4/4 | 0/4 |
 | missing data | 7/7 | 0/7 |
 | tool failure | 5/5 | 5/5 |
-| **Overall** | **100%** | **40%** |
+| **Overall** | **100% (63/63)** | **41.3% (26/63)** |
 
-False-refusal rate on answerable questions: 0%. 12 of 60 requests were stopped before any LLM call, cutting average
-tokens per task from 340 to 247 (-27%).
+False-refusal rate on answerable questions: 0%. 12 of 63 requests were stopped before any LLM call, cutting average
+tokens per task from 339 to 251 (-26%).
 
 > **Honest caveat:** the mock model is intentionally naive (it obeys injected instructions and invents citations) so the
 > suite is deterministic and free in CI. Treat these numbers as a harness check. Run `--llm anthropic` (or your own

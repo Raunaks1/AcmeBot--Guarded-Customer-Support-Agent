@@ -5,10 +5,19 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
+  workflow_dispatch:
+    inputs:
+      llm_provider:
+        description: "LLM Provider for live model evaluation"
+        required: true
+        default: "anthropic"
+        type: choice
+        options:
+          - anthropic
 
 jobs:
   test-and-evaluate:
-    name: Test & Evaluate (Python ${{ matrix.python-version }})
+    name: Test & Evaluate (MockLLM - Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -53,3 +62,42 @@ jobs:
           path: evals/results/
           if-no-files-found: ignore
 
+  live-llm-eval:
+    name: Live LLM Evaluation (${{ inputs.llm_provider || 'anthropic' }})
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies and SDK
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt anthropic>=0.40
+
+      - name: Run live evaluation suite
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python -m evals.run_evals --llm ${{ inputs.llm_provider || 'anthropic' }} --baseline --min-pass 0.90 --min-security 0.95
+
+      - name: Publish live eval summary to job summary
+        if: always()
+        run: |
+          if [ -f evals/results/results.md ]; then
+            cat evals/results/results.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload live eval results artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-eval-results-${{ inputs.llm_provider || 'anthropic' }}
+          path: evals/results/
+          if-no-files-found: ignore
