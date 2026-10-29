@@ -292,6 +292,31 @@ def test_blocked_input_costs_zero_tokens():
     assert r.status == "blocked" and r.metrics.llm_calls == 0 and r.metrics.input_tokens == 0
 
 
+def test_metrics_tracked_per_request():
+    agent, _ = make_agent()
+    r = agent.run("What is your refund policy?")
+    assert r.metrics.latency_ms > 0
+    assert r.metrics.llm_calls == 1
+    assert r.metrics.input_tokens > 0
+    assert r.metrics.output_tokens > 0
+    assert r.metrics.cost_usd > 0
+
+
+def test_eval_harness_summary_and_markdown():
+    from evals.cases import CASES
+    from evals.run_evals import markdown, run_case, summarize
+    sample = CASES[:3]
+    on_rows = [run_case(c, MockLLM(), True) for c in sample]
+    off_rows = [run_case(c, MockLLM(), False) for c in sample]
+    on_summary = summarize(on_rows)
+    off_summary = summarize(off_rows)
+    md = markdown("Sample Test", "mock", on_summary, off_summary)
+    assert "Overall pass rate" in md
+    assert "False-refusal rate" in md
+    assert "Avg cost / task (USD)" in md
+
+
+
 def test_hallucination_is_refused_but_allowed_when_guardrails_off():
     on, _ = make_agent()
     off, _ = make_agent(guardrails=False)

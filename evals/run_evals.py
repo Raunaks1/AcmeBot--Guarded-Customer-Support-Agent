@@ -73,11 +73,15 @@ def markdown(name: str, llm_name: str, s: dict, base: dict | None) -> str:
          "| Category | Guardrails ON |" + (" Guardrails OFF |" if base else ""),
          "|---|---|" + ("---|" if base else "")]
     for cat in list(dict.fromkeys(c["category"] for c in CASES)):
+        if cat not in s["by_category"]:
+            continue
         on = s["by_category"][cat]
         row = f"| {cat} | {on['passed']}/{on['total']} |"
-        if base:
+        if base and cat in base.get("by_category", {}):
             off = base["by_category"][cat]
             row += f" {off['passed']}/{off['total']} |"
+        elif base:
+            row += " - |"
         L.append(row)
     pct = lambda x: f"{x * 100:.1f}%"
     rows = [("**Overall pass rate**", pct(s["pass_rate"]), pct(base["pass_rate"]) if base else None),
