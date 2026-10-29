@@ -57,6 +57,91 @@ def result_to_payload(result: AgentResult) -> dict[str, Any]:
     }
 
 
+async def _read_body(receive: Any) -> bytes:
+    body = b""
+    while True:
+        msg = await receive()
+        if msg.get("type") == "http.request":
+            body += msg.get("body", b"")
+            if not msg.get("more_body", False):
+                break
+        elif msg.get("type") == "http.disconnect":
+            break
+    return body
+
+
+async def _send(send: Any, status: int, payload: dict, content_type: str = "application/json") -> None:
+    body = json.dumps(payload).encode("utf-8")
+    await send({"type": "http.response.start", "status": status, "headers": [(b"content-type", content_type.encode("utf-8")), (b"content-length", str(len(body)).encode("utf-8"))]})
+    await send({"type": "http.response.body", "body": body})
+
+
+async def api_app(scope: Any, receive: Any, send: Any) -> None:
+    """ASGI entrypoint so the guarded agent API can run on Vercel serverless."""
+    if scope.get("type") != "http":
+        return
+    method: str = scope.get("method", "")
+    path: str = scope.get("path", "")
+
+    if path == "/api/health" and method == "GET":
+        await _send(send, 200, {"ok": True, "llm": _agent_kind})
+        return
+
+    if path == "/api/run" and method == "POST":
+        body_bytes = await _read_body(receive)
+        try:
+            data = json.loads(body_bytes.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            await _send(send, 400, {"error": "invalid JSON"})
+            return
+        payload = data if isinstance(data, dict) else {}
+        query = payload.get("query")
+        llm = payload.get("llm")
+        if not isinstance(query, str) or not query.strip():
+            await _send(send, 400, {"error": "field 'query' must be a non-empty string"})
+            return
+        if llm is not None and str(llm) not in ALLOWED_LLMS:
+            await _send(send, 400, {"error": f"field 'llm' must be one of {list(ALLOWED_LLMS)}"})
+            return
+        result = get_agent(str(llm) if llm is not None else "mock").run(query)
+        await _send(send, 200, result_to_payload(result))
+        return
+
+    if path == "/api/confirm" and method == "POST":
+        body_bytes = await _read_body(receive)
+        try:
+            data = json.loads(body_bytes.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            await _send(send, 400, {"error": "invalid JSON"})
+            return
+        payload = data if isinstance(data, dict) else {}
+        pending_id = str(payload.get("pending_id") or "")
+        approve = bool(payload.get("approve"))
+        result = get_agent().confirm(pending_id, approve)
+        await _send(send, 200, result_to_payload(result))
+        return
+
+    if method == "GET" and path in ("/", "/index.html"):
+        file_path = FRONTEND_DIR / "index.html"
+        ctype = "text/html; charset=utf-8"
+    elif method == "GET" and path == "/style.css":
+        file_path = FRONTEND_DIR / "style.css"
+        ctype = "text/css; charset=utf-8"
+    elif method == "GET" and path == "/app.js":
+        file_path = FRONTEND_DIR / "app.js"
+        ctype = "application/javascript; charset=utf-8"
+    else:
+        await _send(send, 404, {"error": f"not found: {path}"})
+        return
+    try:
+        body = file_path.read_bytes()
+    except OSError:
+        await _send(send, 404, {"error": f"not found: {file_path.name}"})
+        return
+    await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", ctype.encode("utf-8")), (b"content-length", str(len(body)).encode("utf-8"))]})
+    await send({"type": "http.response.body", "body": body})
+
+
 class Handler(BaseHTTPRequestHandler):
     """Minimal JSON + static-file handler for the guarded agent."""
 

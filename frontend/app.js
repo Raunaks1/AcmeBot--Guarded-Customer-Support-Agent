@@ -4,6 +4,8 @@ const state = { pendingId: null };
 
 const $ = (id) => document.getElementById(id);
 
+const API_BASE = (window.API_BASE_URL || "").replace(/\/$/, "");
+
 async function post(path, body) {
   const res = await fetch(path, {
     method: "POST",
@@ -14,7 +16,7 @@ async function post(path, body) {
 }
 
 async function init() {
-  const health = await fetch("/api/health").then((r) => r.json());
+  const health = await fetch(API_BASE + "/api/health").then((r) => r.json());
   $("llm-badge").textContent = "llm: " + (health.llm || "mock");
 }
 
@@ -24,7 +26,7 @@ async function runAgent() {
   setBusy(true);
   let data = null;
   try {
-    data = await post("/api/run", { query });
+    data = await post(API_BASE + "/api/run", { query });
   } finally {
     setBusy(false);
   }
@@ -44,7 +46,7 @@ async function confirm(approve) {
   setBusy(true);
   let data = null;
   try {
-    data = await post("/api/confirm", { pending_id: state.pendingId, approve });
+    data = await post(API_BASE + "/api/confirm", { pending_id: state.pendingId, approve });
   } finally {
     setBusy(false);
   }
