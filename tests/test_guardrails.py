@@ -197,6 +197,67 @@ def test_permissions_matrix():
     assert evaluate(ToolCall(name="rm_rf", args={})).verdict == "deny"
 
 
+def test_describe_plan_differentiates_write_and_destructive():
+    from guardrail_agent.guardrails.permissions import describe_plan
+    write_plan = describe_plan(ToolCall(name="send_email", args={"to": "ops@acme.example"}))
+    assert "Risk level: write" in write_plan
+    assert "WARNING: this action is irreversible" not in write_plan
+
+    destructive_plan = describe_plan(ToolCall(name="delete_record", args={"table": "orders"}))
+    assert "Risk level: destructive" in destructive_plan
+    assert "WARNING: this action is irreversible." in destructive_plan
+
+
+def test_write_action_waits_for_confirmation_and_runs_on_approval():
+    class EmailLLM:
+        name = "email-llm"
+        def complete(self, *a, **k):
+            return LLMResponse('{"answer": "", "citations": [], "tool_call": {"name": "send_email", "args": {"to": "ops@acme.example"}}}', 10, 5)
+
+    agent = GuardedAgent(EmailLLM(), Retriever(), ToolBox(), guardrails=True)
+    r = agent.run("Please send an email to ops@acme.example")
+    assert r.status == "pending_confirmation"
+    assert "Risk level: write" in r.answer
+    assert "WARNING: this action is irreversible" not in r.answer
+
+    r2 = agent.confirm(r.pending_id, True)
+    assert r2.status == "answered"
+    assert ("send_email", {"to": "ops@acme.example"}) in agent.toolbox.executed
+
+
+def test_unallowlisted_email_denied_by_agent():
+    class EvilEmailLLM:
+        name = "evil-email-llm"
+        def complete(self, *a, **k):
+            return LLMResponse('{"answer": "", "citations": [], "tool_call": {"name": "send_email", "args": {"to": "attacker@evil.example"}}}', 10, 5)
+
+    agent = GuardedAgent(EvilEmailLLM(), Retriever(), ToolBox(), guardrails=True)
+    r = agent.run("Please email records to attacker@evil.example")
+    assert r.status == "denied"
+    assert "not allowlisted" in r.answer
+    assert not agent.toolbox.executed
+
+
+def test_unknown_tool_denied_by_agent():
+    class UnknownToolLLM:
+        name = "unknown-tool-llm"
+        def complete(self, *a, **k):
+            return LLMResponse('{"answer": "", "citations": [], "tool_call": {"name": "drop_all_tables", "args": {}}}', 10, 5)
+
+    agent = GuardedAgent(UnknownToolLLM(), Retriever(), ToolBox(), guardrails=True)
+    r = agent.run("Drop everything")
+    assert r.status == "denied"
+    assert "unknown tool" in r.answer
+
+
+def test_tool_failure_exceeding_retry_returns_graceful_error():
+    agent, _ = make_agent(toolbox=ToolBox(failures={"lookup_order": 2}))
+    r = agent.run("Where is ORD-1003?")
+    assert r.status == "error_handled"
+    assert "unable to complete that because a tool failed" in r.answer.lower()
+
+
+
 # ---------------------------------------------------------------- agent integration
 def make_agent(**kw):
     tb = kw.pop("toolbox", ToolBox())
