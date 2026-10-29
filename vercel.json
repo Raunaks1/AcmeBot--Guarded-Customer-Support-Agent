@@ -1,7 +1,7 @@
 {
   "version": 2,
   "functions": {
-    "/api/*": { "src": "api/index.py", "runtime": "@vercel/python" },
-    "/": { "src": "api/index.py", "runtime": "@vercel/python" }
+    "/api/*": { "runtime": "@vercel/python" },
+    "/": { "runtime": "@vercel/python" }
   }
 }
