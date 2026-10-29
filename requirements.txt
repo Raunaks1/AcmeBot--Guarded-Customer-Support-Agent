@@ -1,0 +1,4 @@
+pydantic>=2.5
+pytest>=8.0
+# Optional, only for live evals / demo with a real model:
+# anthropic>=0.40

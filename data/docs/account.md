@@ -1,0 +1,1 @@
+To reset your password, click Forgot Password on the login page and follow the emailed link. The link expires after 24 hours. Two-factor authentication can be enabled under Settings > Security. To cancel your subscription, open Settings > Billing and choose Cancel Plan. Cancellation takes effect at the end of the billing period.
