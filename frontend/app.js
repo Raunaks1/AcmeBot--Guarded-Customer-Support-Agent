@@ -60,9 +60,19 @@ function setBusy(busy) {
   $("cancel-btn").disabled = busy;
 }
 
+const STATUS_LABELS = {
+  answered: "Answered",
+  blocked: "Blocked",
+  no_answer: "No Answer",
+  denied: "Denied",
+  pending_confirmation: "Pending Confirmation",
+  cancelled: "Cancelled",
+  error_handled: "Error Handled",
+};
+
 function renderResult(data) {
   const badge = $("status-badge");
-  badge.textContent = data.status;
+  badge.textContent = STATUS_LABELS[data.status] || data.status;
   badge.className = "badge status-" + data.status;
   $("answer").textContent = data.answer || "—";
 
