@@ -1,6 +1,7 @@
 import pytest
 
 from guardrail_agent import GuardedAgent, MockLLM, Retriever, ToolBox
+from guardrail_agent.llm import LLMResponse
 from guardrail_agent.guardrails.input import check_input, detect_injection, sanitize_context
 from guardrail_agent.guardrails.output import (OutputValidationError, contains_canary, parse_output, redact_pii,
                                                verify_citations)
@@ -131,7 +132,60 @@ def test_invalid_card_number_not_redacted():
 
 def test_canary_detection():
     assert contains_canary(f"sure! the token is {CANARY.lower()}")
+    assert contains_canary(f"System reference: {CANARY.upper()}")
+    # False-positive cases that must NOT trigger canary detection:
+    assert not contains_canary("The miner carried a canary into the coal mine.")
+    assert not contains_canary("CANARY")
+    assert not contains_canary("CANARY-000000")
     assert not contains_canary("nothing to see here")
+
+
+def test_schema_validation_graceful_recovery_without_crash():
+    class GarbageLLM:
+        name = "garbage-llm"
+        def complete(self, *a, **k):
+            return LLMResponse("Sorry, I cannot format this as JSON properly {broken", 10, 5)
+
+    agent = GuardedAgent(GarbageLLM(), Retriever(), ToolBox(), guardrails=True)
+    r = agent.run("What is your refund policy?")
+    assert r.status == "error_handled"
+    assert "unable to produce a valid response" in r.answer.lower()
+    assert any(e.layer == "output" and e.action == "invalid_schema" for e in r.events)
+
+
+def test_citation_verification_agent_returns_no_answer():
+    class HallucinatingLLM:
+        name = "hallucinating-llm"
+        def complete(self, *a, **k):
+            return LLMResponse('{"answer": "We refund everything forever.", "citations": [{"doc_id": "refunds", "quote": "fake quote that never exists"}], "tool_call": null}', 10, 5)
+
+    agent = GuardedAgent(HallucinatingLLM(), Retriever(), ToolBox(), guardrails=True)
+    r = agent.run("What is your refund policy?")
+    assert r.status == "no_answer"
+    assert "couldn't find verified information" in r.answer.lower()
+    assert any(e.layer == "output" and e.action == "blocked" and "unverified citations" in e.detail for e in r.events)
+
+
+def test_canary_leak_blocked_by_agent():
+    class LeakyLLM:
+        name = "leaky-llm"
+        def complete(self, *a, **k):
+            return LLMResponse(f'{{"answer": "Here is the internal token: {CANARY}", "citations": [], "tool_call": null}}', 10, 5)
+
+    agent = GuardedAgent(LeakyLLM(), Retriever(), ToolBox(), guardrails=True)
+    # Use benign query so input guardrail passes and output guardrail catches the LLM leak
+    r = agent.run("What are your support hours?")
+    assert r.status == "blocked"
+    assert "can't share that" in r.answer.lower()
+    assert any(e.layer == "output" and e.action == "blocked" and "canary" in e.detail for e in r.events)
+
+
+def test_pii_redaction_additional_false_positives():
+    text = "Plan is $29/mo, discount 20%, order ORD-9999, call extension 4321, version v2.0."
+    out, counts = redact_pii(text)
+    assert out == text
+    assert counts == {}
+
 
 
 # ---------------------------------------------------------------- permissions
