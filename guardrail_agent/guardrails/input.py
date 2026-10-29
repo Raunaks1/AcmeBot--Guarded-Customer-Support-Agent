@@ -22,7 +22,7 @@ INJECTION_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("override_instructions_postfix", re.compile(r"\b(ignore|disregard|forget|override)\s+(all\s+|any\s+)?(of\s+)?(the\s+)?(instructions?|rules?|prompts?|guidelines?)\s+(above|before|given|you\s+(were|have\s+been)\s+given)", _F)),
     ("forget_everything", re.compile(r"\b(forget|ignore|disregard)\s+(everything|all)\s+(above|before|previous|prior)", _F)),
     ("reveal_prompt", re.compile(r"\b(reveal|print|show|display|output|leak|expose)\b[^.\n]{0,30}\b(system|hidden|initial|original|secret)\s+(prompt|instructions?|message)", _F)),
-    ("ask_initial_instructions", re.compile(r"\b(what\s+(were|are)\s+your\s+(initial|original|hidden)\s+instructions|your\s+system\s+prompt)", _F)),
+    ("ask_initial_instructions", re.compile(r"\b(what\s+(were|are|was)\s+(your\s+)?(initial|original|hidden|system)\s+(instructions?|prompts?)|your\s+system\s+prompt)", _F)),
     ("persona_jailbreak", re.compile(r"\b(you\s+are\s+now\s+(dan|in\s+developer\s+mode|an?\s+unrestricted)|developer\s+mode|jailbreak(ed)?\s+mode|do\s+anything\s+now)", _F)),
     ("fake_system_header", re.compile(r"^\s*#{0,4}\s*(system|assistant)\s*:", _F)),
     ("fake_system_tag", re.compile(r"</?\s*(system|instructions?)\s*>", _F)),
