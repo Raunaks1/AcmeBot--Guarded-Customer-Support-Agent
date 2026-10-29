@@ -149,3 +149,21 @@ def test_tool_retry_recovers_from_transient_failure():
 def test_user_email_not_used_as_search_terms():
     docs = Retriever().search("my email is john@example.com, what is the refund policy")
     assert docs[0].id == "refunds"
+
+
+@pytest.mark.parametrize("guardrails", [False, True])
+def test_acceptance_refund_policy_returns_cited_answer(guardrails):
+    agent, _ = make_agent(guardrails=guardrails)
+    r = agent.run("What is the refund policy?")
+    assert r.status == "answered"
+    assert len(r.citations) > 0
+    assert any("30 days" in c.quote for c in r.citations)
+
+
+@pytest.mark.parametrize("guardrails", [False, True])
+def test_acceptance_order_lookup_triggers_tool_call(guardrails):
+    agent, tb = make_agent(guardrails=guardrails)
+    r = agent.run("Where is ORD-1001?")
+    assert r.status == "answered"
+    assert ("lookup_order", {"order_id": "ORD-1001"}) in tb.executed
+

@@ -7,3 +7,4 @@
 - **Test Integrity**: Never delete, skip, or weaken a test to make it pass. If a test looks wrong, tell me why first.
 - **Post-Task Protocol**: After every task: run pytest, show the output, then summarise what changed.
 - **Code Style & Config**: Keep functions small and type-hinted. Put policies and thresholds in `guardrail_agent/config.py`.
+
